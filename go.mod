@@ -1,4 +1,4 @@
-module github.com/bensoncb/GoScan-ui
+module github.com/bensoncarlb/GoScan-ui
 
 go 1.26.1
 
