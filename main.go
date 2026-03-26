@@ -165,6 +165,8 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 	var clickRegions []regionRow
 	regRow := 0
 
+	var imgScale float32 = 1.0
+
 	//The two entry fields for the Document Type Title and Identifier
 	fieldSize := fyne.NewSize(300, 45)
 	title := widget.NewEntry()
@@ -212,10 +214,10 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 						FieldName:   newReg.name,
 						RegionTitle: newReg.name,
 						Region: image.Rect(
-							int(newReg.x1),
-							int(newReg.y1),
-							int(newReg.x2),
-							int(newReg.y2))}
+							int(newReg.x1/imgScale),
+							int(newReg.y1/imgScale),
+							int(newReg.x2/imgScale),
+							int(newReg.y2/imgScale))}
 					actualRegions += 1
 				}
 			}
@@ -261,7 +263,7 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 			rect := canvas.NewRectangle(color.Black)
 
 			rect.FillColor = color.Transparent
-			rect.StrokeWidth = 3
+			rect.StrokeWidth = 1
 			rect.StrokeColor = color.RGBA{R: 255, A: 255}
 
 			rect.Resize(fyne.NewSize(
@@ -280,7 +282,14 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 		}
 	})
 
-	imgTap.Resize(getImageSize(u[0].Path()))
+	imgSize := getImageSize(u[0].Path())
+	if imgSize.Height > 800 || imgSize.Width > 1000 {
+		imgScale = 800 / imgSize.Height
+		imgSize.Height = imgSize.Height * imgScale
+		imgSize.Width = imgSize.Width * imgScale
+	}
+
+	imgTap.Resize(imgSize)
 	imgContainer.Add(imgTap)
 
 	fieldContainer := container.NewVBox(form, lstRegions)
