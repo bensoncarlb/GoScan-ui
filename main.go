@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"image/color"
 	"net/http"
 	"strings"
 
@@ -97,6 +98,7 @@ func (a *goScanUI) buildProcessedDocs() fyne.CanvasObject {
 	return list
 }
 
+// Retrieve a list of current Document Types and display them
 func (a *goScanUI) buildDocumentTypes() fyne.CanvasObject {
 	res, err := http.Get("http://localhost:8090/getdoctypes")
 
@@ -127,7 +129,6 @@ func (a *goScanUI) buildDocumentTypes() fyne.CanvasObject {
 		a.deleteDocType(rsp.DocumentTypes[id].Identifier)
 	}
 
-	addNew := widget.NewButton("Add New Type", func() {})
 	docList := widget.NewList(
 		func() int {
 			return len(rsp.DocumentTypes)
@@ -149,9 +150,11 @@ func (a *goScanUI) buildDocumentTypes() fyne.CanvasObject {
 		},
 	)
 
-	return container.NewPadded(addNew, docList)
+	return container.NewPadded(docList)
 }
 
+// Handle an image being dragged onto the window
+// Set up configuring a new Document Type
 func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 	win := a.app.NewWindow("Add a Document Type")
 
@@ -192,22 +195,26 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 			lstRegions.Refresh() //One last refresh to get the latest changes
 			//Create a slice of regions based on the clicks we tracked
 			docRegions := make([]structs.DocumentRegion, len(clickRegions))
+			actualRegions := 0
 
-			for r, newReg := range clickRegions {
-				docRegions[r] = structs.DocumentRegion{
-					FieldName:   newReg.name,
-					RegionTitle: newReg.name,
-					Region: image.Rect(
-						int(newReg.x1),
-						int(newReg.y1),
-						int(newReg.x2),
-						int(newReg.y2))}
+			for _, newReg := range clickRegions {
+				if newReg.x1 > 0 && newReg.x2 > 0 {
+					docRegions[actualRegions] = structs.DocumentRegion{
+						FieldName:   newReg.name,
+						RegionTitle: newReg.name,
+						Region: image.Rect(
+							int(newReg.x1),
+							int(newReg.y1),
+							int(newReg.x2),
+							int(newReg.y2))}
+					actualRegions += 1
+				}
 			}
 
 			docNew := structs.DocumentType{
 				Title:      title.Text,
 				Identifier: ident.Text,
-				Regions:    docRegions}
+				Regions:    docRegions[:actualRegions]}
 
 			if addDocType(docNew) {
 				win.Close()
@@ -218,36 +225,50 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 		},
 	}
 
+	imgContainer := container.NewWithoutLayout()
+
 	//Load the image the just dropped
 	img := canvas.NewImageFromURI(u[0])
 	img.FillMode = canvas.ImageFillOriginal
-
+	clicks := 0
 	//Use a fyne community plugin to support making the image clickable
 	imgTap := wrapper.MakeTappable(img, func(pe *fyne.PointEvent) {
+		clicks += 1
 		//Don't bother trying to initialize the slice until the user does something
 		if clickRegions == nil {
-			clickRegions = make([]regionRow, 1)
-
-			newRegion := regionRow{x1: pe.Position.X, y1: pe.Position.X}
-
-			clickRegions[regRow] = newRegion
-		} else if clickRegions[regRow].y2 > 0 {
-			//The last region recorded has the first pair of points
-			//Add this one as the second
-			regRow += 1
-			newRegion := regionRow{x1: pe.Position.X, y1: pe.Position.X}
-
-			clickRegions = append(clickRegions, newRegion)
-		} else {
-			//Only thing left is that we're adding the second set of points
-			clickRegions[regRow].x2 = pe.Position.X
-			clickRegions[regRow].y2 = pe.Position.Y
+			clickRegions = make([]regionRow, 50) //TODO handle expansion
 		}
 
-		lstRegions.Refresh()
+		switch clicks % 2 {
+		case 1:
+			//First pair of clicks for a new region
+			newRegion := regionRow{x1: pe.Position.X, y1: pe.Position.Y}
+			clickRegions[regRow] = newRegion
+		case 0:
+			//Second click for a new region
+			standardizeRegion(&clickRegions[regRow], pe.Position.X, pe.Position.Y)
+			rect := canvas.NewRectangle(color.Black)
+
+			rect.FillColor = color.Transparent
+			rect.StrokeWidth = 3
+			rect.StrokeColor = color.RGBA{R: 255, A: 255}
+
+			rect.Resize(fyne.NewSize(
+				clickRegions[regRow].x2-clickRegions[regRow].x1,
+				clickRegions[regRow].y2-clickRegions[regRow].y1))
+
+			rect.Move(fyne.NewPos(clickRegions[regRow].x1, clickRegions[regRow].y1))
+			imgContainer.Add(rect)
+
+			lstRegions.Refresh()
+			regRow += 1
+		}
 	})
 
-	win.SetContent(container.NewPadded(form, imgTap, lstRegions))
+	imgTap.Resize(fyne.NewSize(500, 500))
+	imgContainer.Add(imgTap)
+
+	win.SetContent(container.NewVBox(form, imgContainer, lstRegions))
 	win.Show()
 }
 
@@ -257,6 +278,23 @@ func deleteElem(s []regionRow, i int) {
 	}
 
 	s[i] = regionRow{}
+}
+
+// Handle if a defined region is inverted
+// Second point should always be further down/right than the first
+func standardizeRegion(r *regionRow, x float32, y float32) {
+	if r.x1 > x || r.y1 > y {
+		r.x2 = r.x1
+		r.y2 = r.y1
+
+		r.x1 = x
+		r.y1 = y
+
+	} else {
+		r.x2 = x
+		r.y2 = y
+	}
+
 }
 
 func addDocType(doc structs.DocumentType) bool {
@@ -278,14 +316,6 @@ func addDocType(doc structs.DocumentType) bool {
 	}
 
 	return true
-}
-
-func absFloat(val float32) float32 {
-	if val < 0 {
-		return -val
-	}
-
-	return val
 }
 
 func (a *goScanUI) deleteDocType(docIdentifier string) {
