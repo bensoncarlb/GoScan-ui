@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/png"
 	"net/http"
+	"os"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -164,13 +166,20 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 	regRow := 0
 
 	//The two entry fields for the Document Type Title and Identifier
+	fieldSize := fyne.NewSize(300, 45)
 	title := widget.NewEntry()
 	ident := widget.NewEntry()
+
+	title.Resize(fieldSize)
+	ident.Resize(fieldSize)
 
 	//Create a list to display the recorded regions
 	lstRegions := widget.NewList(
 		func() int {
-			return len(clickRegions)
+			if clickRegions == nil {
+				return 0
+			}
+			return regRow
 		},
 		func() fyne.CanvasObject {
 			return widget.NewEntry()
@@ -225,6 +234,8 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 		},
 	}
 
+	form.Resize(fyne.NewSize(300, 200))
+
 	imgContainer := container.NewWithoutLayout()
 
 	//Load the image the just dropped
@@ -258,17 +269,25 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 				clickRegions[regRow].y2-clickRegions[regRow].y1))
 
 			rect.Move(fyne.NewPos(clickRegions[regRow].x1, clickRegions[regRow].y1))
+
 			imgContainer.Add(rect)
 			imgContainer.Refresh()
+
+			lstRegions.Resize(fyne.NewSize(300, float32(regRow+1)*40))
 			lstRegions.Refresh()
+
 			regRow += 1
 		}
 	})
 
-	imgTap.Resize(fyne.NewSize(500, 500))
+	imgTap.Resize(getImageSize(u[0].Path()))
 	imgContainer.Add(imgTap)
 
-	win.SetContent(container.NewVBox(form, imgContainer, lstRegions))
+	fieldContainer := container.NewVBox(form, lstRegions)
+	fieldContainer.Resize(fyne.NewSize(300, 800))
+
+	//win.SetContent(container.NewHBox(form, imgContainer, lstRegions))
+	win.SetContent(container.NewHBox(fieldContainer, imgContainer))
 	win.Show()
 }
 
@@ -294,6 +313,26 @@ func standardizeRegion(r *regionRow, x float32, y float32) {
 	} else {
 		r.y2 = y
 	}
+}
+
+func getImageSize(f string) fyne.Size {
+	if strings.TrimSpace(f) == "" {
+		return fyne.NewSize(100, 100)
+	}
+
+	imgFile, err := os.Open(f)
+
+	if err != nil {
+		return fyne.NewSize(100, 100)
+	}
+
+	img, _, err := image.Decode(imgFile)
+
+	if err != nil {
+		return fyne.NewSize(100, 100)
+	}
+
+	return fyne.NewSize(float32(img.Bounds().Size().X), float32(img.Bounds().Size().Y))
 }
 
 func addDocType(doc structs.DocumentType) bool {
