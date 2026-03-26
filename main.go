@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
 	"net/http"
 	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"github.com/bensoncarlb/GoScan/structs"
@@ -178,8 +180,22 @@ func (a *goScanUI) viewProcessedItem(itemName string) {
 		panic(err)
 	}
 
-	win := a.app.NewWindow("Document: " + itemName)
+	winFields := a.app.NewWindow("Document: " + itemName)
 
-	win.SetContent(widget.NewLabel(fmt.Sprintf("%v", doc.Fields)))
-	win.Show()
+	winFields.SetContent(widget.NewLabel(fmt.Sprintf("%v", doc.Fields)))
+	winFields.Show()
+
+	winImage := a.app.NewWindow("Image: " + itemName)
+
+	img, _, err := image.Decode(bytes.NewReader(doc.ImgData))
+
+	if err != nil {
+		winImage.SetContent(widget.NewLabel("Failed to open image: " + err.Error()))
+	}
+
+	contentImage := canvas.NewImageFromImage(img)
+	contentImage.FillMode = canvas.ImageFillOriginal
+
+	winImage.SetContent(contentImage)
+	winImage.Show()
 }
