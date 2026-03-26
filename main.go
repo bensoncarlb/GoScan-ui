@@ -16,23 +16,21 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+type goScanUI struct {
+	app fyne.App
+}
+
 func main() {
-	myApp := app.New()
-	myWindow := myApp.NewWindow("TabContainer Widget")
+	ui := goScanUI{}
 
-	status := buildStatus()
-
-	docs := buildDocuments()
-
-	mgmt := buildManagement()
+	ui.app = app.New()
+	myWindow := ui.app.NewWindow("TabContainer Widget")
 
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Status", status),
-		container.NewTabItem("Documents", docs),
-		container.NewTabItem("Management", mgmt),
+		container.NewTabItem("Status", ui.buildStatus()),
+		container.NewTabItem("Documents", ui.buildProcessedDocs()),
+		container.NewTabItem("Types", ui.buildDocumentTypes()),
 	)
-
-	//tabs.Append(container.NewTabItemWithIcon("Home", theme.HomeIcon(), widget.NewLabel("Home tab")))
 
 	tabs.SetTabLocation(container.TabLocationLeading)
 
@@ -40,7 +38,7 @@ func main() {
 	myWindow.ShowAndRun()
 }
 
-func buildStatus() fyne.CanvasObject {
+func (a *goScanUI) buildStatus() fyne.CanvasObject {
 	//TODO configurable
 	res, err := http.Get("http://localhost:8090/ping")
 
@@ -55,10 +53,38 @@ func buildStatus() fyne.CanvasObject {
 		statusMessage = widget.NewLabel(fmt.Sprintf("Server responded with unexpected code: %d", res.StatusCode))
 	}
 
-	return container.NewAdaptiveGrid(2, statusIcon, statusMessage)
+	return container.NewPadded(statusIcon, statusMessage)
 }
 
-func buildDocuments() fyne.CanvasObject {
+func (a *goScanUI) buildProcessedDocs() fyne.CanvasObject {
+	rsp, err := http.Get("http://localhost:8090/getitems")
+
+	if err != nil {
+		return container.NewHBox(widget.NewLabel("Failed to connect:" + err.Error()))
+	}
+
+	items := structs.RspGetItems{}
+	json.NewDecoder(rsp.Body).Decode(&items)
+
+	list := widget.NewList(
+		func() int {
+			return len(items.Items)
+		},
+		func() fyne.CanvasObject {
+			return widget.NewLabel("template")
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			o.(*widget.Label).SetText(items.Items[i])
+		})
+
+	list.OnSelected = func(id widget.ListItemID) {
+		a.viewProcessedItem(items.Items[id])
+	}
+
+	return list
+}
+
+func (a *goScanUI) buildDocumentTypes() fyne.CanvasObject {
 	res, err := http.Get("http://localhost:8090/getdoctypes")
 
 	if err != nil {
@@ -73,6 +99,21 @@ func buildDocuments() fyne.CanvasObject {
 		panic(err)
 	}
 
+	list := widget.NewList(
+		func() int {
+			return len(rsp.DocumentTypes)
+		},
+		func() fyne.CanvasObject {
+			return widget.NewLabel("template")
+		},
+		func(i widget.ListItemID, o fyne.CanvasObject) {
+			o.(*widget.Label).SetText(rsp.DocumentTypes[i].Title)
+		})
+
+	list.OnSelected = func(id widget.ListItemID) {
+		a.deleteDocType(rsp.DocumentTypes[id].Identifier)
+	}
+
 	return widget.NewList(
 		func() int {
 			return len(rsp.DocumentTypes)
@@ -80,7 +121,7 @@ func buildDocuments() fyne.CanvasObject {
 		func() fyne.CanvasObject {
 			return container.NewPadded(
 				widget.NewLabel("Will be replaced"),
-				widget.NewButton("Do Something", nil),
+				widget.NewButton("Delete", nil),
 			)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
@@ -88,20 +129,14 @@ func buildDocuments() fyne.CanvasObject {
 
 			// new part
 			item.(*fyne.Container).Objects[1].(*widget.Button).OnTapped = func() {
-				deleteDocType(rsp.DocumentTypes[id].Identifier)
+				a.deleteDocType(rsp.DocumentTypes[id].Identifier)
 				//TODOD remove record from list
 			}
 		},
 	)
 }
 
-func buildManagement() fyne.CanvasObject {
-	mgmt := widget.NewLabel("Mgmt")
-
-	return mgmt
-}
-
-func deleteDocType(docIdentifier string) {
+func (a *goScanUI) deleteDocType(docIdentifier string) {
 	if strings.TrimSpace(docIdentifier) == "" {
 		return
 	}
@@ -121,4 +156,30 @@ func deleteDocType(docIdentifier string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (a *goScanUI) viewProcessedItem(itemName string) {
+	req := structs.ReqRetrieveItem{ItemName: itemName}
+
+	b := bytes.Buffer{}
+
+	err := json.NewEncoder(&b).Encode(req)
+
+	res, err := http.Post("http://localhost:8090/retrieveitem", "application/json", &b)
+
+	if err != nil {
+		panic(err)
+	}
+
+	doc := structs.RspRetrieveItem{}
+	err = json.NewDecoder(res.Body).Decode(&doc)
+
+	if err != nil {
+		panic(err)
+	}
+
+	win := a.app.NewWindow("Document: " + itemName)
+
+	win.SetContent(widget.NewLabel(fmt.Sprintf("%v", doc.Fields)))
+	win.Show()
 }
