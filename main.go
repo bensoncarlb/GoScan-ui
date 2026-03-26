@@ -259,7 +259,7 @@ func (a *goScanUI) addDocType(p fyne.Position, u []fyne.URI) {
 
 			rect.Move(fyne.NewPos(clickRegions[regRow].x1, clickRegions[regRow].y1))
 			imgContainer.Add(rect)
-
+			imgContainer.Refresh()
 			lstRegions.Refresh()
 			regRow += 1
 		}
@@ -283,18 +283,17 @@ func deleteElem(s []regionRow, i int) {
 // Handle if a defined region is inverted
 // Second point should always be further down/right than the first
 func standardizeRegion(r *regionRow, x float32, y float32) {
-	if r.x1 > x || r.y1 > y {
-		r.x2 = r.x1
-		r.y2 = r.y1
-
-		r.x1 = x
-		r.y1 = y
-
+	if r.x1 > x {
+		r.x1, r.x2 = x, r.x1
 	} else {
 		r.x2 = x
-		r.y2 = y
 	}
 
+	if r.y1 > y {
+		r.y1, r.y2 = y, r.y1
+	} else {
+		r.y2 = y
+	}
 }
 
 func addDocType(doc structs.DocumentType) bool {
