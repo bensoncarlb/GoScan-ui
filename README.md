@@ -7,6 +7,7 @@ This is a UI package for interacting with a [GoScan](https://github.com/bensonca
 
 ## Usage
 ```go run github.com/bensoncarlb/GoScan-ui@latest```
+> The first time the project runs, fyne does a lot of initial setup in the background. This is cached for subsequent runs, but does mean the first start can take quite a while.
 
 * Status
     * A basic check that the server's /ping can be reached.
