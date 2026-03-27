@@ -131,28 +131,7 @@ func (a *goScanUI) buildDocumentTypes() fyne.CanvasObject {
 		a.deleteDocType(rsp.DocumentTypes[id].Identifier)
 	}
 
-	docList := widget.NewList(
-		func() int {
-			return len(rsp.DocumentTypes)
-		},
-		func() fyne.CanvasObject {
-			return container.NewPadded(
-				widget.NewLabel("Will be replaced"),
-				widget.NewButton("Delete", nil),
-			)
-		},
-		func(id widget.ListItemID, item fyne.CanvasObject) {
-			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(rsp.DocumentTypes[id].Title)
-
-			// new part
-			item.(*fyne.Container).Objects[1].(*widget.Button).OnTapped = func() {
-				a.deleteDocType(rsp.DocumentTypes[id].Identifier)
-				//TODOD remove record from list
-			}
-		},
-	)
-
-	return container.NewPadded(docList)
+	return container.NewPadded(list)
 }
 
 // Handle an image being dragged onto the window
